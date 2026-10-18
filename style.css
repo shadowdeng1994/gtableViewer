@@ -1,0 +1,445 @@
+/* gtableViewer — style.css
+   颜色一律走 CSS 变量：暗色是 :root 默认值，亮色在 html[data-theme="light"] 里整组覆盖。
+   main.js 会读 --label-bg / --label-fg / --hl-hover / --frame-3d 四个变量来画 canvas 与 3D 线框，
+   所以新增配色请改这里，不要往 JS 里写死。 */
+:root {
+  --bg: #0b0f1a;
+  --bg-2: #111827;
+  --panel: #131a2b;
+  --panel-2: #182034;
+  --line: #232d45;
+  --fg: #e6edf3;
+  --mut: #8b98b8;
+  --accent: #60a5fa;
+  --mono: "JetBrains Mono", "Cascadia Code", Consolas, "Courier New", monospace;
+
+  color-scheme: dark;
+  --header-bg: linear-gradient(180deg, #16203a, #101728);
+  --vp-bg: radial-gradient(120% 120% at 50% 0%, #16203a 0%, #0a0e18 70%);
+  --wrap-bg: #0d1322;
+  --shadow-2d: 0 4px 22px rgba(0, 0, 0, .5);
+  --btn-on-bg: #1d4ed8;
+  --btn-on-bd: #3b82f6;
+  --toolbar-bg: rgba(11, 15, 26, .78);
+  --tip-bg: rgba(9, 13, 24, .95);
+  --tip-fg: #cfd8ea;
+  --tip-title: #fff;
+  --item-line: #1f2941;
+  --kids-line: #1e2740;
+  --row-hover: #1a2338;
+  --row-hov: #22304d;
+  --row-sel: #1e3a8a;
+  --row-sel-bd: #3b82f6;
+  --row-desc: #16244a;
+  --tree-nm: #b9c4dd;
+  --tree-cnt: #5b6a8c;
+  --tree-z: #475569;
+  --sb-1: #26314e;
+  --sb-2: #33436b;
+  /* 下面五个会被 main.js 读取 */
+  --label-bg: rgba(11, 15, 26, .9);
+  --label-bd: rgba(255, 255, 255, .16);
+  --label-fg: #e6edf3;
+  --hl-hover: #ffffff;
+  --frame-3d: #64748b;
+}
+
+html[data-theme="light"] {
+  --bg: #eef1f7;
+  --bg-2: #e4e9f2;
+  --panel: #ffffff;
+  --panel-2: #f2f5fb;
+  --line: #d4dbe8;
+  --fg: #16203a;
+  --mut: #5b6780;
+  --accent: #2563eb;
+
+  color-scheme: light;
+  --header-bg: linear-gradient(180deg, #ffffff, #eaeff8);
+  --vp-bg: radial-gradient(120% 120% at 50% 0%, #ffffff 0%, #dde5f2 72%);
+  --wrap-bg: #e7ecf5;
+  --shadow-2d: 0 4px 20px rgba(30, 45, 80, .16);
+  --btn-on-bg: #2563eb;
+  --btn-on-bd: #1d4ed8;
+  --toolbar-bg: rgba(255, 255, 255, .84);
+  --tip-bg: rgba(255, 255, 255, .97);
+  --tip-fg: #2a3550;
+  --tip-title: #0b1220;
+  --item-line: #e2e8f3;
+  --kids-line: #dde4f0;
+  --row-hover: #eaf0fb;
+  --row-hov: #dbe6fb;
+  --row-sel: #bfdbfe;
+  --row-sel-bd: #2563eb;
+  --row-desc: #eef3fd;
+  --tree-nm: #33405e;
+  --tree-cnt: #7b879f;
+  --tree-z: #9aa6bd;
+  --sb-1: #c3ccdd;
+  --sb-2: #a9b6cd;
+  --label-bg: rgba(255, 255, 255, .94);
+  --label-bd: rgba(22, 32, 58, .22);
+  --label-fg: #16203a;
+  --hl-hover: #0f172a;
+  --frame-3d: #94a3b8;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0; height: 100%;
+  background: var(--bg); color: var(--fg);
+  font: 14px/1.55 -apple-system, "Segoe UI", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  overflow: hidden;
+  transition: background-color .2s ease, color .2s ease;
+}
+
+header {
+  display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  padding: 10px 16px; background: var(--header-bg);
+  border-bottom: 1px solid var(--line);
+}
+header h1 { font-size: 16px; margin: 0; letter-spacing: .3px; }
+header .sub { color: var(--mut); font-size: 12px; }
+header .spacer { flex: 1; }
+header .stats { color: var(--mut); font-size: 12px; font-family: var(--mono); }
+header .stats b { color: var(--accent); font-weight: 600; }
+
+/* 右上角三个开关：全屏 + 一键折叠 + 主题 */
+#btn-theme, #btn-fold-all, #btn-focus {
+  align-self: center; flex: none;
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; padding: 4px 11px; border-radius: 20px;
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--fg);
+}
+#btn-theme .ico, #btn-fold-all .ico, #btn-focus .ico { font-size: 13px; line-height: 1; }
+#btn-theme:hover, #btn-fold-all:hover, #btn-focus:hover { border-color: var(--accent); }
+
+/* 栏宽：默认值写在 :root，用户拖出来的宽度由 JS 内联到 <html> 的 --w-*-set 上
+   （内联样式优先于这条规则），所以 <head> 里的预置脚本能在首帧之前恢复栏宽，不会先默认再跳一下。 */
+:root {
+  --w-left-set: minmax(320px, 40%);
+  --w-right-set: minmax(230px, 275px);
+}
+
+main {
+  display: grid;
+  /* 五列：左栏 · 把手 · 视口 · 把手 · 右栏。把手那一列宽度是 0——它只是个定位锚点，
+     拖拽条与折叠按钮都绝对居中在 20px 的栏间距正中浮动，所以三栏的实际宽度与加把手之前完全一致。
+     --w-* 只是 --w-*-set 的别名：整栏折叠时把 --w-* 改成竖条宽度（见文件末尾「折叠」段），
+     用户拖出来的 --w-*-set 原样留着，展开就回到他习惯的宽度。 */
+  --w-left: var(--w-left-set);
+  --w-right: var(--w-right-set);
+  grid-template-columns: var(--w-left) 0px minmax(320px, 1fr) 0px var(--w-right);
+  gap: 10px; padding: 10px;
+  height: calc(100% - 51px);
+}
+
+/* ── 面板 ── */
+.panel {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  transition: background-color .2s ease, border-color .2s ease;
+}
+#panel-left { display: flex; flex-direction: column; gap: 10px; min-width: 0; overflow-x: hidden; overflow-y: auto; }
+
+.block {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+  transition: background-color .2s ease, border-color .2s ease;
+}
+.block.grow { flex: 1; min-height: 180px; display: flex; flex-direction: column; }
+/* 标题栏即折叠开关（h2.head 同时用于右侧图层树面板） */
+h2.head {
+  margin: 0 0 8px; font-size: 12px; font-weight: 600; letter-spacing: .6px;
+  color: var(--mut); text-transform: uppercase;
+  display: flex; align-items: center; gap: 8px;
+  cursor: pointer; user-select: none;
+}
+h2.head .hint { font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 11px; }
+h2.head:hover { color: var(--fg); }
+/* 折叠箭头：本体是个真按钮（能 Tab 到、Enter/Space 触发），点击冒泡到标题栏统一处理 */
+h2.head .fold {
+  flex: none; width: 16px; height: 16px; padding: 0; border: 0; border-radius: 4px;
+  background: transparent; color: var(--mut); cursor: pointer;
+}
+h2.head .fold::before {
+  content: '▾'; display: block; font-size: 9px; line-height: 16px; text-align: center;
+  transition: transform .18s ease;
+}
+h2.head:hover .fold { color: var(--fg); background: var(--panel-2); }
+.block.grow .body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.body { min-width: 0; }
+
+/* ── 控件 ── */
+select, button {
+  font: inherit; font-size: 12px; color: var(--fg);
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 7px; padding: 5px 10px; cursor: pointer;
+  transition: background-color .2s ease, border-color .2s ease, color .2s ease;
+}
+select:hover, button:hover { border-color: var(--accent); }
+button.on { background: var(--btn-on-bg); border-color: var(--btn-on-bd); color: #fff; }
+label.ctl { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--mut); cursor: pointer; }
+input[type="range"] { width: 130px; accent-color: var(--accent); vertical-align: middle; }
+input[type="checkbox"] { accent-color: var(--accent); }
+
+#sample-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+#sample-row select { min-width: 170px; }
+#sample-desc { color: var(--mut); font-size: 12px; }
+
+/* ── 2D 画布 ── */
+.canvas-wrap {
+  position: relative; flex: 1; min-height: 0;
+  background: var(--wrap-bg); border: 1px solid var(--line); border-radius: 8px;
+  overflow: hidden;
+  transition: background-color .2s ease, border-color .2s ease;
+}
+.canvas-wrap canvas { position: absolute; }
+/* 画布本身永远是白的：那是 ggplot 的 plot.background，不跟随主题 */
+#canvas-2d { background: #fff; border-radius: 4px; box-shadow: var(--shadow-2d); }
+#canvas-2d-overlay { pointer-events: none; }
+
+/* ── 图例 ── */
+#legend { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+#legend .li {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; padding: 2px 7px; border-radius: 20px;
+  background: var(--panel-2); border: 1px solid var(--line); cursor: pointer;
+}
+#legend .li:hover { border-color: var(--accent); }
+#legend .sw { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+#legend .c { color: var(--mut); font-family: var(--mono); font-size: 10px; }
+
+/* ── 选中信息 ── */
+#sel-info { max-height: 168px; overflow: auto; font-size: 12px; }
+#sel-info .item { padding: 4px 0; border-bottom: 1px dashed var(--item-line); }
+#sel-info .item:last-child { border-bottom: 0; }
+#sel-info .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+#sel-info b { font-family: var(--mono); color: var(--accent); font-weight: 600; }
+.mut { color: var(--mut); font-size: 11px; font-family: var(--mono); }
+.empty { color: var(--mut); font-size: 12px; padding: 6px 0; }
+#sel-info .rp {
+  font-family: var(--mono); font-size: 10px; color: var(--mut);
+  word-break: break-all; line-height: 1.5; margin-top: 2px; cursor: copy;
+}
+#sel-info .rp:hover { color: var(--accent); }
+
+/* ── gtable 定位（R 取值路径）── */
+#rpath { font-size: 12px; }
+#rpath .crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin-bottom: 8px; }
+#rpath .crumb {
+  font-family: var(--mono); font-size: 10.5px; line-height: 1.6;
+  padding: 0 6px; border-radius: 5px; cursor: pointer; max-width: 100%;
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--fg);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: background-color .2s ease, border-color .2s ease, color .2s ease;
+}
+#rpath .crumb:hover { border-color: var(--accent); }
+#rpath .crumb.here { background: var(--btn-on-bg); border-color: var(--btn-on-bd); color: #fff; }
+#rpath .cs { color: var(--mut); font-size: 10px; font-family: var(--mono); }
+#rpath .code-line {
+  display: flex; align-items: flex-start; gap: 8px;
+  background: var(--wrap-bg); border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px;
+  transition: background-color .2s ease, border-color .2s ease;
+}
+#rpath code {
+  flex: 1; font-family: var(--mono); font-size: 11px; line-height: 1.6; color: var(--fg);
+  word-break: break-all; cursor: copy;
+}
+#rpath code i { font-style: normal; color: var(--accent); }
+#rpath .copy { flex: none; font-size: 11px; padding: 2px 8px; }
+#rpath .note { color: var(--mut); font-size: 11px; line-height: 1.6; margin-top: 6px; }
+#rpath .note code { font-family: var(--mono); font-size: 10.5px; color: var(--fg); cursor: default; }
+
+/* ── 3D 视口 ── */
+#viewport {
+  position: relative; overflow: hidden; min-width: 0;
+  background: var(--vp-bg);
+  transition: background .2s ease;
+}
+#toolbar {
+  position: absolute; top: 10px; left: 10px; z-index: 5;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 7px 9px; border-radius: 9px;
+  background: var(--toolbar-bg); border: 1px solid var(--line);
+  backdrop-filter: blur(6px);
+}
+#toolbar .sep { width: 1px; height: 18px; background: var(--line); }
+/* 工具条自己的折叠键：收起后只剩这颗小胶囊（齿轮 + 箭头），把视口让出来 */
+#toolbar .fold {
+  flex: none; display: inline-flex; align-items: center; gap: 3px;
+  min-width: 20px; height: 20px; padding: 0 4px; border: 0; border-radius: 5px;
+  background: transparent; color: var(--mut); cursor: pointer;
+}
+#toolbar .fold:hover { color: var(--fg); background: var(--panel-2); }
+#toolbar .fold::before { content: '▾'; font-size: 9px; line-height: 1; transition: transform .18s ease; }
+#toolbar .fold .gear { display: none; font-size: 11px; line-height: 1; }
+
+/* ── 图层树 ── */
+#tree-panel { display: flex; flex-direction: column; min-height: 0; padding: 10px 8px 10px 12px; }
+#tree { overflow: auto; min-height: 0; flex: 1; font-size: 12px; padding-right: 2px; }
+#tree .node { position: relative; }
+#tree .kids { margin-left: 11px; padding-left: 7px; border-left: 1px solid var(--kids-line); }
+#tree .row {
+  display: flex; align-items: center; gap: 5px;
+  padding: 2px 5px; border-radius: 5px; cursor: pointer;
+  white-space: nowrap; overflow: hidden;
+}
+#tree .row:hover { background: var(--row-hover); }
+#tree .row.hov { background: var(--row-hov); }
+#tree .row.sel { background: var(--row-sel); box-shadow: inset 0 0 0 1px var(--row-sel-bd); }
+#tree .row.desc { background: var(--row-desc); }
+#tree .badge {
+  font-size: 10px; line-height: 15px; padding: 0 5px; border-radius: 4px;
+  flex: none; font-family: var(--mono);
+}
+#tree .nm { color: var(--tree-nm); font-family: var(--mono); font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
+#tree .cnt { color: var(--tree-cnt); font-size: 10px; font-family: var(--mono); flex: none; }
+#tree .z { color: var(--tree-z); font-size: 10px; font-family: var(--mono); margin-left: auto; flex: none; }
+
+/* ── tooltip ── */
+#tooltip {
+  position: fixed; z-index: 50; display: none; pointer-events: none; max-width: 320px;
+  background: var(--tip-bg); border: 1px solid var(--line); border-radius: 7px;
+  padding: 7px 9px; font-size: 11.5px; line-height: 1.5; color: var(--tip-fg);
+  box-shadow: var(--shadow-2d);
+}
+#tooltip b { color: var(--tip-title); font-family: var(--mono); font-size: 11px; }
+#tooltip .k {
+  display: inline-block; margin: 0 4px; padding: 0 5px; border-radius: 4px;
+  font-size: 10px; font-family: var(--mono);
+}
+
+/* ── 折叠 ──
+   两级：① 单个功能单元（左栏五个区块、右侧图层树、3D 工具条）只收起标题栏下面的正文；
+        ② 整栏（左 / 右）收成一条竖条，把宽度让给 3D 视口。
+   状态由 main.js 写在 <html data-lfold|data-rfold>（列宽）与单元自身的 .folded 上，并存 localStorage；
+   <head> 里还有一段预置脚本，保证刷新时不会「先展开再收起」地跳一下。 */
+.block.folded { padding-bottom: 10px; }
+.block.folded .body { display: none; }
+.block.folded h2.head { margin-bottom: 0; }
+.block.grow.folded { flex: none; min-height: 0; }
+.folded h2.head .fold::before { transform: rotate(-90deg); }
+
+#toolbar.folded { padding: 4px 5px; }
+#toolbar.folded > :not(.fold) { display: none; }
+#toolbar.folded .fold::before { transform: rotate(-90deg); }
+#toolbar.folded .fold .gear { display: inline; }
+
+/* 栏间把手：0 宽度的网格列 + 绝对居中的按钮，正好浮在 20px 栏间距的正中 */
+.gutter { position: relative; z-index: 6; min-width: 0; }
+.gutter .gbtn {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 2;
+  width: 15px; height: 54px; padding: 0; border-radius: 8px;
+  background: var(--panel); border: 1px solid var(--line); color: var(--mut);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, .18);
+}
+.gutter .gbtn:hover { color: var(--fg); border-color: var(--accent); background: var(--panel-2); }
+.gutter[data-col="col-left"] .gbtn::before { content: '‹'; display: block; font-size: 12px; line-height: 1; }
+.gutter[data-col="col-right"] .gbtn::before { content: '›'; display: block; font-size: 12px; line-height: 1; }
+html[data-lfold="1"] .gutter[data-col="col-left"] .gbtn::before { content: '›'; }
+html[data-rfold="1"] .gutter[data-col="col-right"] .gbtn::before { content: '‹'; }
+
+/* 栏宽拖拽条：同样浮在栏间距正中，通高但只有 7px 宽，平时只露一小截淡色刻度，
+   悬停 / 拖动 / 键盘聚焦时变亮变长。折叠成竖条时拖宽没有意义，直接隐藏。 */
+.gutter .grip {
+  position: absolute; top: 0; bottom: 0; left: 50%; transform: translateX(-50%); z-index: 1;
+  width: 7px; border: 0; padding: 0; background: transparent;
+  cursor: col-resize; touch-action: none; border-radius: 4px;
+}
+.gutter .grip::after {
+  content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 3px; height: 30px; border-radius: 2px; background: var(--mut); opacity: .3;
+  transition: opacity .15s ease, height .15s ease, background-color .15s ease;
+}
+.gutter .grip:hover::after, .gutter .grip:focus-visible::after, .gutter .grip.drag::after {
+  opacity: 1; height: 64px; background: var(--accent);
+}
+.gutter .grip:focus { outline: none; }
+html[data-lfold="1"] .gutter[data-col="col-left"] .grip,
+html[data-rfold="1"] .gutter[data-col="col-right"] .grip { display: none; }
+/* 拖动过程中统一光标并禁掉选中，否则划过面板文字会拖出一片蓝 */
+body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-select: none !important; }
+
+/* 整栏折叠：列宽收成一条竖条（变量定义在 main 上，所以覆盖也写在 main） */
+html[data-lfold="1"] main { --w-left: 30px; }
+html[data-rfold="1"] main { --w-right: 30px; }
+html[data-lfold="1"] #panel-left > .block { display: none; }
+html[data-lfold="1"] #panel-left > .col-strip { display: flex; }
+html[data-rfold="1"] #tree-panel > h2.head,
+html[data-rfold="1"] #tree-panel > #tree { display: none; }
+html[data-rfold="1"] #tree-panel > .col-strip { display: flex; }
+html[data-rfold="1"] #tree-panel { padding: 8px 3px; }
+
+.col-strip {
+  display: none; flex: 1; min-height: 140px; flex-direction: column;
+  align-items: center; justify-content: center; gap: 7px;
+  cursor: pointer; color: var(--mut);
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  transition: background-color .2s ease, border-color .2s ease, color .2s ease;
+}
+.col-strip:hover { color: var(--fg); border-color: var(--accent); }
+.col-strip .vt { writing-mode: vertical-rl; font-family: var(--mono); font-size: 11px; letter-spacing: 1.5px; }
+.col-strip .chev { font-size: 13px; line-height: 1; }
+/* 图层树面板本身就是 .panel，竖条不再套一层卡片 */
+.panel > .col-strip { background: transparent; border: 0; border-radius: 0; }
+
+/* ── 全屏 ──
+   两侧整栏收起、3D 视口独占；「2D 成品」这块由 main.js 搬进视口，变成左下角的悬浮卡，
+   一边看拆解一边对照成品。全屏是叠在「整栏折叠」之上的一层：data-focus 只管布局，
+   不动 data-lfold / data-rfold，退出就回到用户原来的折叠与栏宽。
+   卡片的尺寸与位置是 CSS 变量，main.js 只改变量（--fx/--fy 是到视口左/下的距离）。 */
+html[data-focus="1"] main { grid-template-columns: minmax(0, 1fr); }
+html[data-focus="1"] #panel-left,
+html[data-focus="1"] #tree-panel,
+html[data-focus="1"] .gutter { display: none; }
+
+#block-2d .fx, #block-2d .fresize { display: none; }
+#block-2d.is-float {
+  position: absolute; z-index: 6;
+  left: var(--fx, 18px); bottom: var(--fy, 18px);
+  width: var(--fw, 340px); height: var(--fh, 260px);
+  min-height: 0; padding: 8px 10px 10px;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, .32);
+}
+#block-2d.is-float h2.head { margin-bottom: 6px; cursor: grab; }
+#block-2d.is-float.dragging h2.head { cursor: grabbing; }
+#block-2d.is-float .fx, #block-2d.is-float .fresize { display: block; }
+#block-2d .fx {
+  margin-left: auto; flex: none; width: 20px; height: 20px; padding: 0;
+  background: transparent; border: 0; border-radius: 5px;
+  color: var(--mut); font-size: 11px; line-height: 1; cursor: pointer;
+}
+#block-2d .fx:hover { color: var(--fg); background: var(--panel-2); }
+#block-2d .fresize {
+  position: absolute; right: 0; bottom: 0; width: 18px; height: 18px;
+  cursor: nwse-resize; touch-action: none;
+}
+#block-2d .fresize::after {
+  content: ''; position: absolute; right: 4px; bottom: 4px; width: 8px; height: 8px;
+  border-right: 2px solid var(--mut); border-bottom: 2px solid var(--mut);
+  border-bottom-right-radius: 3px; opacity: .45;
+}
+#block-2d .fresize:hover::after { opacity: 1; border-color: var(--accent); }
+body.float-moving, body.float-moving * { cursor: grabbing !important; user-select: none !important; }
+body.float-sizing, body.float-sizing * { cursor: nwse-resize !important; user-select: none !important; }
+
+/* 滚动条 */
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-thumb { background: var(--sb-1); border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: var(--sb-2); }
+::-webkit-scrollbar-track { background: transparent; }
+
+@media (max-width: 1180px) {
+  main { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; height: auto; overflow: auto; }
+  body, html { overflow: auto; }
+  #tree-panel { grid-column: span 2; max-height: 300px; }
+  .block.grow { min-height: 300px; }
+  /* 窄屏是上下堆叠布局，「整栏折叠」没有意义：把手与竖条都藏掉，并让已存的折叠状态失效
+     （单元级折叠仍然有效，所以 .block.folded 的规则不动） */
+  .gutter, .col-strip { display: none !important; }
+  html[data-lfold="1"] #panel-left > .block { display: block; }
+  html[data-lfold="1"] #panel-left > .block.grow { display: flex; }
+  html[data-rfold="1"] #tree-panel > h2.head { display: flex; }
+  html[data-rfold="1"] #tree-panel > #tree { display: block; }
+  html[data-rfold="1"] #tree-panel { padding: 10px 8px 10px 12px; }
+}

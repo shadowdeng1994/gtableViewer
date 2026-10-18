@@ -1,0 +1,47 @@
+[
+  {
+    "id": "scatter",
+    "name": "散点图 + 图例",
+    "desc": "单个 panel：数据层、网格线、刻度、图例键",
+    "file": "scatter.json",
+    "nodes": 26,
+    "leaves": 14,
+    "kb": 14.1
+  },
+  {
+    "id": "boxplot",
+    "name": "箱线图（分类轴）",
+    "desc": "离散 x 轴、线段型网格、按组着色",
+    "file": "boxplot.json",
+    "nodes": 77,
+    "leaves": 47,
+    "kb": 31.1
+  },
+  {
+    "id": "facet",
+    "name": "分面图（facet_wrap）",
+    "desc": "7 个 panel + strip 条，gtable 嵌套最丰富",
+    "file": "facet.json",
+    "nodes": 169,
+    "leaves": 95,
+    "kb": 71.6
+  },
+  {
+    "id": "hist",
+    "name": "直方图 + theme_minimal",
+    "desc": "geom_histogram 柱子：rect 的 just 是 left/top 不是 centre",
+    "file": "hist.json",
+    "nodes": 23,
+    "leaves": 11,
+    "kb": 11.8
+  },
+  {
+    "id": "RepresentativeTree",
+    "name": "组合大图（.RData + Size）",
+    "desc": "33 个 grob 的 arrange 布局，画布尺寸取自 RData 里的 Size",
+    "file": "RepresentativeTree.json",
+    "nodes": 22,
+    "leaves": 7,
+    "kb": 424.5
+  }
+]

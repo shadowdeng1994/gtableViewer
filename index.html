@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>gtable 3D 拆解教学 · ggplot2 图形结构可视化</title>
+<meta name="description" content="把 ggplot2 画出来的 gtable / grob 结构沿 Z 轴炸开：左边看 2D 成品，右边按绘制顺序与嵌套层级逐层看，点任意一层直接给出能在 R 里跑的定位表达式。" />
+<!-- 分享卡片（GitHub / 微信 / Twitter 抓 og:*）；og:image 需要绝对 URL，这里刻意不写 -->
+<meta property="og:title" content="gtable 3D 拆解教学 · ggplot2 图形结构可视化" />
+<meta property="og:description" content="ggplot2 图形在 gtable / grob 层面的结构 · Z 轴 = 绘制顺序 + 嵌套深度" />
+<meta property="og:type" content="website" />
+<!-- 图标直接内联成 data: URI：不多一个请求、file:// 双击也能显示、还顺手消掉 /favicon.ico 的 404。
+     build_preview.ps1 的「产物不得引用外部文件」自查专门给 data: 开了口子。 -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%230f172a'/%3E%3Cg%20fill='none'%20stroke-width='2'%3E%3Crect%20x='5'%20y='19'%20width='16'%20height='8'%20rx='1.5'%20stroke='%2360a5fa'/%3E%3Crect%20x='8'%20y='12'%20width='16'%20height='8'%20rx='1.5'%20stroke='%2334d399'/%3E%3Crect%20x='11'%20y='5'%20width='16'%20height='8'%20rx='1.5'%20stroke='%23facc15'/%3E%3C/g%3E%3C/svg%3E" />
+<!-- 主题预置：首帧之前就把 data-theme 落到 <html>，否则刷新时会先闪一下默认色 -->
+<script>
+  (function () {
+    var t = 'dark';
+    try { t = localStorage.getItem('gtv-theme') || 'dark'; } catch (e) { /* file:// 下可能被禁用 */ }
+    document.documentElement.dataset.theme = (t === 'light') ? 'light' : 'dark';
+  })();
+</script>
+<!-- 折叠预置：同理，先按上次存的折叠状态落 data-lfold / data-rfold，避免刷新时左右栏先展开再收起 -->
+<script>
+  (function () {
+    var f = {};
+    try { f = JSON.parse(localStorage.getItem('gtv-fold') || '{}') || {}; } catch (e) { /* file:// 下可能被禁用 */ }
+    var m = function (k) { return f[k] ? '1' : ''; };
+    document.documentElement.dataset.lfold = m('col-left');
+    document.documentElement.dataset.rfold = m('col-right');
+  })();
+</script>
+<!-- 栏宽预置：同理，先按上次拖出来的宽度落 --w-*-set（写在 <html> 上，:root 的默认值让位给它），
+     避免刷新时左右栏先按默认宽渲染再跳到位 -->
+<script>
+  (function () {
+    var w = {};
+    try { w = JSON.parse(localStorage.getItem('gtv-view') || '{}') || {}; } catch (e) { /* file:// 下可能被禁用 */ }
+    var set = function (k, v) {
+      if (typeof v === 'number' && isFinite(v) && v > 0) document.documentElement.style.setProperty(k, v + 'px');
+    };
+    set('--w-left-set', w['col-left']);
+    set('--w-right-set', w['col-right']);
+  })();
+</script>
+<link rel="stylesheet" href="./style.css" />
+<!-- Three.js 本地化：import map 把裸模块名映射到 lib/ 下的本地文件（GitHub Pages 相对路径，不依赖 CDN） -->
+<script type="importmap">
+  {
+    "imports": {
+      "three": "./lib/three.module.js",
+      "three/addons/controls/OrbitControls.js": "./lib/OrbitControls.js"
+    }
+  }
+</script>
+</head>
+<body>
+
+<header>
+  <h1>▦ gtable 3D 拆解教学</h1>
+  <span class="sub">ggplot2 图形在 gtable / grob 层面的结构 · Z 轴 = 绘制顺序 + 嵌套深度</span>
+  <span class="spacer"></span>
+  <span class="stats">
+    节点 <b id="stat-nodes">–</b> ·
+    图层 <b id="stat-leaves">–</b> ·
+    绘制步序 <b id="stat-draw">–</b>
+  </span>
+  <button id="btn-focus" title="全屏：收起两侧，2D 成品悬浮在视口左下角（Esc 退出）">
+    <span class="ico">⤢</span><span id="focus-text">全屏</span>
+  </button>
+  <button id="btn-fold-all" title="折叠 / 展开全部功能单元（快捷键 F）">
+    <span class="ico">⊟</span><span id="fold-all-text">折叠全部</span>
+  </button>
+  <button id="btn-theme" title="切换明暗主题（快捷键 T）">
+    <span class="ico">◐</span><span id="theme-text">暗色</span>
+  </button>
+</header>
+
+<main id="main">
+  <!-- ── 左：控制台 ── -->
+  <aside id="panel-left">
+
+    <!-- 整栏折叠后只剩这条竖条，点它展开 -->
+    <div class="col-strip" data-col="col-left" title="展开左栏">
+      <span class="chev">›</span><span class="vt">控制台</span>
+    </div>
+
+    <div class="block" data-fold="sample">
+      <h2 class="head" title="折叠 / 展开">
+        <button class="fold" aria-expanded="true" aria-controls="b-sample" tabindex="0"></button>
+        样例 <span class="hint">被拆解的图由 rds 导出为 JSON</span>
+      </h2>
+      <div class="body" id="b-sample">
+        <div id="sample-row">
+          <select id="sample-select" title="选择被拆解的图（由 rds 导出为 JSON）"></select>
+          <span id="sample-desc" class="mut"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 全屏时这块会被 main.js 搬进 3D 视口当悬浮卡（拖标题栏挪位置、拖右下角改大小） -->
+    <div class="block grow" data-fold="2d" id="block-2d">
+      <h2 class="head" title="折叠 / 展开">
+        <button class="fold" aria-expanded="true" aria-controls="b-2d" tabindex="0"></button>
+        2D 成品效果 <span class="hint">按 draw 顺序叠放的全部 grob</span>
+        <button class="fx" id="btn-unfocus" title="退出全屏，把这块放回左栏">✕</button>
+      </h2>
+      <div class="body" id="b-2d">
+        <div class="canvas-wrap">
+          <canvas id="canvas-2d"></canvas>
+          <canvas id="canvas-2d-overlay"></canvas>
+        </div>
+      </div>
+      <div class="fresize" title="拖动调整悬浮卡大小"></div>
+    </div>
+
+    <div class="block" data-fold="legend">
+      <h2 class="head" title="折叠 / 展开">
+        <button class="fold" aria-expanded="true" aria-controls="b-legend" tabindex="0"></button>
+        图层类别 <span class="hint">点击可整类选中</span>
+      </h2>
+      <div class="body" id="b-legend">
+        <div id="legend"></div>
+      </div>
+    </div>
+
+    <div class="block" data-fold="sel">
+      <h2 class="head" title="折叠 / 展开">
+        <button class="fold" aria-expanded="true" aria-controls="b-sel" tabindex="0"></button>
+        选中元素 <span class="hint">Shift / Ctrl 点击可多选 · Esc 清空</span>
+      </h2>
+      <div class="body" id="b-sel">
+        <div id="sel-info"></div>
+      </div>
+    </div>
+
+    <div class="block" data-fold="rpath">
+      <h2 class="head" title="折叠 / 展开">
+        <button class="fold" aria-expanded="true" aria-controls="b-rpath" tabindex="0"></button>
+        gtable 定位 <span class="hint">点任一级跳到该层 · 点路径复制</span>
+      </h2>
+      <div class="body" id="b-rpath">
+        <div id="rpath"></div>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- 栏间把手：.grip 拖动改栏宽（双击恢复默认），.gbtn 折叠整栏把空间让给 3D 视口 -->
+  <div class="gutter" data-col="col-left">
+    <div class="grip" role="separator" aria-orientation="vertical" tabindex="0" title="拖动调整左栏宽度（双击恢复默认）"></div>
+    <button class="gbtn" title="折叠左栏"></button>
+  </div>
+
+  <!-- ── 中：3D 拆解视图 ── -->
+  <section id="viewport" class="panel">
+    <div id="toolbar" data-fold="toolbar">
+      <button id="btn-top" title="俯视，近似 2D：爆炸展开归零（快捷键 1）">俯视</button>
+      <button id="btn-iso" title="等轴 3D 视图：恢复爆炸展开（快捷键 2）">3D</button>
+      <button id="btn-reset" title="回到俯视（爆炸展开归零）并清空选择">重置</button>
+      <span class="sep"></span>
+      <label class="ctl" for="explode" title="层与层之间的间距。俯视会把它归零，点 3D 再恢复到你上次手调的值">爆炸展开
+        <input type="range" id="explode" min="0" max="3" step="0.05" value="0" />
+      </label>
+      <span class="sep"></span>
+      <label class="ctl"><input type="checkbox" id="chk-isolate" /> 仅看选中</label>
+      <label class="ctl"><input type="checkbox" id="chk-labels" checked /> 标签</label>
+      <span class="sep"></span>
+      <button class="fold" id="btn-fold-toolbar" aria-expanded="true" title="折叠 / 展开工具条"><span class="gear">⚙</span></button>
+    </div>
+  </section>
+
+  <div class="gutter" data-col="col-right">
+    <div class="grip" role="separator" aria-orientation="vertical" tabindex="0" title="拖动调整右栏宽度（双击恢复默认）"></div>
+    <button class="gbtn" title="折叠右栏"></button>
+  </div>
+
+  <!-- ── 右：图层树 ── -->
+  <aside id="tree-panel" class="panel" data-fold="col-right">
+    <h2 class="head" title="折叠 / 展开右栏">
+      <button class="fold" aria-expanded="true" aria-controls="tree" tabindex="0"></button>
+      gtable / grob 图层树
+    </h2>
+    <div id="tree"></div>
+    <div class="col-strip" data-col="col-right" title="展开右栏">
+      <span class="chev">‹</span><span class="vt">图层树</span>
+    </div>
+  </aside>
+</main>
+
+<div id="tooltip"></div>
+
+<script type="module" src="./main.js"></script>
+</body>
+</html>
