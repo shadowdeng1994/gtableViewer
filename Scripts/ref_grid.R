@@ -82,7 +82,10 @@ for (id in ids) {
   L <- (0.299 * img[, , 1] + 0.587 * img[, , 2] + 0.114 * img[, , 3]) * 255
   m <- round(cell_mean(L, GX, GY))
   out <- file.path(outdir, paste0(id, ".grid.txt"))
-  writeLines(apply(m, 1, function(r) paste(r, collapse = " ")), out)
+  # 原始字节 + LF（理由同 export_gtable.R 写 json）：免得同一份基准在不同平台上
+  # 字节不同，git 里看着像整文件改动
+  writeBin(charToRaw(paste0(paste(apply(m, 1, function(r) paste(r, collapse = " ")),
+                                   collapse = "\n"), "\n")), out)
   cat(sprintf("[ref_grid] %s -> %s  (%dx%d px @%d，网格 %dx%d，画布 %s，mean=%.1f)\n",
               id, out, RW, RH, REF_RES, GX, GY, inp$size_src, mean(m)))
 }

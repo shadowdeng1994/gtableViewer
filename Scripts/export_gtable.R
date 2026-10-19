@@ -8,9 +8,11 @@
 #   Rscript export_gtable.R fig.RData out.json fig "图" --plot=fig.Merged$Plot --size=7x6.11
 #
 # 吃什么输入（详见下面「输入装载」）:
-#   * .rds   : saveRDS(ggplot) 或 saveRDS(gtable)
-#   * .RData : save(...) 的工作区快照，认 list(Plot=, Size=) 这种图束 ——
-#              Plot 是画好的 gtable，Size 是画布尺寸（英寸）；给了 Size 就按它画。
+#   * .rds   : saveRDS(ggplot) / saveRDS(gtable) / saveRDS(list(Plot =, Size =))
+#   * .RData : save(...) 的工作区快照。认 list(Plot =, Size =) 这种图束 ——
+#              Plot 是画好的图（gtable 或 ggplot），Size 是画布尺寸（英寸）；
+#              有 Size 就按 Size 画（拼出来的 gtable 自己常常整列 null，没有尺寸）。
+#              一个文件里有多个对象时用 sidecar 的 plot=<对象名 或 fig$Plot> 指认。
 #
 # 设计原则（与网页端约定）:
 #   * 不在浏览器里解析 .rds —— 所有 grob 树解析都发生在这里（R 端）。
@@ -242,6 +244,20 @@ lty_is_dash <- function(lty) {
   TRUE                                        # 其余按虚线
 }
 
+# 线端与拐角：grid 默认 lineend = "butt"、linejoin = "miter"，与 canvas 的默认值一致，
+# 所以只有非默认值才写进 JSON。ggtree 的枝干是 round 端头 + round 拐角，按默认值画
+# 会让整棵树比 R 淡 4~14%（短线段上半圆帽占的面积比例很大，实测墨量 0.86 倍）。
+gtv_cap <- function(v) {
+  if (is.null(v) || length(v) == 0) return(NULL)
+  s <- tolower(as.character(v)[1])
+  if (is.na(s) || s == "butt") NULL else if (s %in% c("round", "square")) s else NULL
+}
+gtv_join <- function(v) {
+  if (is.null(v) || length(v) == 0) return(NULL)
+  s <- tolower(as.character(v)[1])
+  if (is.na(s) || s == "miter") NULL else if (s %in% c("round", "bevel")) s else NULL
+}
+
 # ---------------------------------------------------------------------------
 # kind 分类
 # ---------------------------------------------------------------------------
@@ -301,8 +317,10 @@ gtv_device_k <- function(res = 200L) {
     f <- tempfile(fileext = ".png")
     # 画布必须容得下探针：res=400 时 80pt 的圆有 444px 直径，小画布会把它裁掉
     side <- max(400L, round(3 * expect))
+    dev_id <- NA_integer_
     got <- tryCatch({
       grDevices::png(f, width = side, height = side, res = res, bg = "white", type = "cairo")
+      dev_id <- grDevices::dev.cur()
       grid.newpage(); pushViewport(viewport()); force(expr); popViewport()
       invisible(grDevices::dev.off())
       m <- png::readPNG(f)
@@ -319,7 +337,12 @@ gtv_device_k <- function(res = 200L) {
            else                mean(vapply(off, function(d) dark(L[mid + d, ]), numeric(1)))
       if (is.finite(v) && v > 0) v / expect else NA_real_
     }, error = function(e) NA_real_, finally = {
-      if (length(grDevices::dev.list())) try(grDevices::dev.off(), silent = TRUE)
+      # 只关探针自己开的那个设备。以前这里是一句无参 dev.off()，它会把文件开头
+      # 那个 pdf(NULL) 也关掉 —— 非交互 Rscript 下「没有设备时画东西」会自动
+      # 生成 Rplots.pdf，于是每跑一次导出就在仓库里掉一个垃圾文件。
+      if (!is.na(dev_id) && dev_id %in% grDevices::dev.list())
+        try(grDevices::dev.off(dev_id), silent = TRUE)
+      if (!length(grDevices::dev.list())) pdf(NULL)   # 兜底：保证场上永远有无害设备
       unlink(f)
     })
     if (is.finite(got) && got > 0.05 && got < 2) got else NA_real_
@@ -344,26 +367,51 @@ gtv_device_k <- function(res = 200L) {
 gtv_ref_res <- function() as.integer(getOption("gtv.ref.res", 200L))
 
 # ---------------------------------------------------------------------------
-# 输入装载：.rds（ggplot 或 gtable） / .RData（图束 list(Plot=, Size=)）
+# 输入装载：.rds 与 .RData 走同一条路
 # ---------------------------------------------------------------------------
-# 为什么要有这一层：学生手里的图往往不是一个干净的 ggplot 对象。常见的是
-#   save(plot, Size, file = "fig.RData")
-# 于是工作区里躺着一个 list：$Plot 是已经拼好的 gtable（ggtree/patchwork 拼过多 panel），
-#   $Size 是当初 ggsave 用的画布尺寸（英寸）。
-# 关键麻烦：拼出来的 gtable 宽高常常全是 null 单位 —— 它自己没有尺寸，
-# 只有配上 Size 才知道该画多大，所以「给了画布尺寸就必须按那个尺寸画」。
+# 学生交上来的东西只有两种形态：
+#   A) 一个可绘制对象        .rds 里 saveRDS(ggplot) / saveRDS(gtable)
+#   B) 一个图束 list         list(Plot = <画好的图>, Size = c(w, h))
+#      ggtree / patchwork 拼过多 panel 之后基本都存成这样
+#      （save(plot, Size, file = "fig.RData")）。画布尺寸只有 Size 知道：
+#      拼出来的 gtable 宽高常常整列都是 null 单位，它自己没尺寸。
+# 形态 A / B 在 .rds 和 .RData 里都可能出现（.rds 里存 list 的也不少），所以这里
+# 不按扩展名分叉，统一成三步：
+#   ① 把文件摊进一个环境（.RData = 整个工作区；.rds = 一项，名字固定 tmp）
+#   ② 从环境里认出那张图：sidecar 的 plot= > 图束的 $Plot > 叫 Plot 的 > 唯一的可绘制对象
+#   ③ 顺着同一份图束取 $Size；没有就看环境里叫 Size 的；再没有才用默认 7x5
 #
-# 返回 list(obj, kind, root_var, root_expr, size_in, size_src, source)
+# gtv_load_input() 返回 list(obj, kind, root_var, root_expr, size_in, size_src, source, bundle)
 #   obj       : ggplot 对象，或已经画好的 grob/gtable
-#   kind      : "ggplot"（还要 build）| "grob"（直接用）
+#   kind      : "ggplot"（还要 build）| "grob"（直接 grid.draw）
 #   root_var  : 学生 R 会话里那个变量的名字（写进 meta.root_var）
 #   root_expr : 学生能直接粘进 R 的根表达式，如 ggplotGrob(tmp)、fig.Merged$Plot
-#   size_in   : 画布尺寸（英寸）
-#   size_src  : "Size" | "sidecar" | "default"
+#   size_in   : 画布尺寸（英寸），c(w, h)
+#   size_src  : "Size" | "Size(按 px 理解)" | "sidecar" | "default"
 #   source    : "rds" | "rdata"
+#   bundle    : 图束那个 list（$Size 的出处），不是图束就是 NULL
 # ---------------------------------------------------------------------------
 
+# 可绘制的东西：ggplot 对象，或者已经画好的 grob / gTree
 is_drawing_obj <- function(x) inherits(x, c("ggplot", "grob", "gTree"))
+
+# 图束：list(Plot = <可绘制对象>)。名字必须叫 Plot —— 不认 list(g = ...) 那种，
+# 免得把 list(x = ..., y = ...) 之类的普通数据误当成一张图。
+is_plot_bundle <- function(x) {
+  is.list(x) && !is.null(names(x)) && "Plot" %in% names(x) && is_drawing_obj(x[["Plot"]])
+}
+
+# gtable 的宽/高里有没有「绝对单位」。拼出来的图（ggtree / patchwork）常常整列是
+# null 单位：那种 gtable 没有 Size 就画不出正确大小，装载时要提醒一句。
+# 注意必须按下标取（u[i]），不能直接 vapply(u, ...) —— 对 unit_v2 直接迭代时
+# null_weight() 会对每个元素判成 0（实测 vapply(u,..) = 0,0 而 u[i] = 1,1），
+# 于是「整列 null」会被误判成「有绝对尺寸」。
+gtv_has_intrinsic_size <- function(g) {
+  if (!inherits(g, "gtable")) return(TRUE)
+  fixed <- function(u) length(u) > 0 &&
+    any(vapply(seq_along(u), function(i) null_weight(u[i]), numeric(1)) == 0)
+  fixed(g$widths) && fixed(g$heights)
+}
 
 # 单位 → 英寸（"in" 是 R 的关键字，所以这里用命名向量而不是 switch）
 to_inches <- function(v, unit = "in") {
@@ -378,6 +426,11 @@ to_inches <- function(v, unit = "in") {
 # 把 Size 归一成英寸两位数。
 # 自动兜底：数值大得离谱（>100）时按像素理解 —— 504x440 这种是 px，不是 504 英寸。
 norm_size <- function(v, unit = "in", src = "Size") {
+  # Size 有时是个 unit 对象（unit(c(3, 3), "in")）—— 那就用它自带的单位，比 sidecar 里的准
+  if (inherits(v, "unit")) {
+    u <- tryCatch(unitType(v)[1], error = function(e) NA_character_)
+    if (length(u) == 1 && !is.na(u)) { unit <- u; v <- as.numeric(v) }
+  }
   v <- suppressWarnings(as.numeric(unlist(v)))
   v <- v[is.finite(v)]
   if (length(v) < 2) return(NULL)
@@ -399,46 +452,55 @@ parse_size_str <- function(s, unit = "in") {
   list(size = to_inches(as.numeric(nums[1:2]), unit), src = "sidecar")
 }
 
-# 在 RData 装载出来的环境里找「那张图」
-# 顺序：sidecar 指定的路径 → 含 $Plot 的 list → 叫 Plot 的对象 → 唯一的可绘制对象
-find_plot_in_env <- function(e, names_in_file, plot = NA_character_) {
+# 从装载环境里认出「那张图」。plot 是 sidecar 里的指定（对象名，或 fig$Plot 这种 $ 路径）。
+# 顺序：sidecar 指定 → 图束的 $Plot → 叫 Plot 的可绘制对象 → 唯一的可绘制对象。
+# 返回 list(obj, expr, var, bundle)：bundle 是 $Size 可能所在的那层 list（没有就是 NULL）。
+gtv_pick_plot <- function(e, nms, plot = NA_character_, what = "输入") {
+  getv <- function(n) get(n, envir = e)
   if (!is.na(plot) && nzchar(plot)) {
+    # 路径直接求值，所以 [[1]] 这种下标写法也能用
     o <- tryCatch(eval(parse(text = plot), envir = e), error = function(err) NULL)
-    if (is.null(o)) stop("RData 里找不到 plot=", plot, "（文件里对象有: ",
-                         paste(names_in_file, collapse = ", "), "）")
-    return(list(obj = o, expr = plot, var = sub("\\$.*$", "", plot)))
+    if (is.null(o))
+      stop(what, " 里找不到 plot=", plot, "（文件里的对象有: ", paste(nms, collapse = ", "), "）")
+    first <- strsplit(plot, "$", fixed = TRUE)[[1]][1]
+    holder <- tryCatch(eval(parse(text = first), envir = e), error = function(err) NULL)
+    return(list(obj = o, expr = plot, var = first,
+                bundle = if (is_plot_bundle(holder)) holder else NULL))
   }
-  is_grob_obj <- function(o) inherits(o, c("grob", "gTree"))
-  # 1) 图束：list 里有 Plot 元素且能画
-  bundles <- Filter(function(n) {
-    o <- get(n, envir = e)
-    is.list(o) && "Plot" %in% names(o) && is_grob_obj(o[["Plot"]])
-  }, names_in_file)
+  # 1) 图束：list(Plot = <可画的>)，画布尺寸在同层的 $Size
+  bundles <- Filter(function(n) is_plot_bundle(getv(n)), nms)
   if (length(bundles)) {
     n <- bundles[1]
     if (length(bundles) > 1)
-      cat("   note: RData 里有多个含 $Plot 的 list，取第一个", n,
-          "（其余", paste(bundles[-1], collapse = ", "), "，要换就用 sidecar 的 plot=）\n")
-    return(list(obj = get(n, envir = e)[["Plot"]], expr = paste0(n, "$Plot"), var = n))
+      cat("   note: ", what, " 里有多个图束（含 $Plot 的 list）：", paste(bundles, collapse = ", "),
+          "，取第一个 ", n, "；要换用 sidecar 的 plot=\n", sep = "")
+    return(list(obj = getv(n)[["Plot"]], expr = paste0(n, "$Plot"), var = n, bundle = getv(n)))
   }
   # 2) 顶层就叫 Plot 的可绘制对象
-  if ("Plot" %in% names_in_file && is_grob_obj(get("Plot", envir = e)))
-    return(list(obj = get("Plot", envir = e), expr = "Plot", var = "Plot"))
+  if ("Plot" %in% nms && is_drawing_obj(getv("Plot")))
+    return(list(obj = getv("Plot"), expr = "Plot", var = "Plot", bundle = NULL))
   # 3) 唯一的 ggplot / grob
-  drawables <- Filter(function(n) is_drawing_obj(get(n, envir = e)), names_in_file)
-  if (length(drawables) == 1)
-    return(list(obj = get(drawables, envir = e), expr = drawables, var = drawables))
-  if (length(drawables) > 1)
-    stop("RData 里有多个可绘制对象（", paste(drawables, collapse = ", "),
+  drawables <- Filter(function(n) is_drawing_obj(getv(n)), nms)
+  if (length(drawables) == 1L)
+    return(list(obj = getv(drawables), expr = drawables, var = drawables, bundle = NULL))
+  if (length(drawables) > 1L)
+    stop(what, " 里有多个可绘制对象（", paste(drawables, collapse = ", "),
          "），请用 sidecar 指定 plot=<对象名或 $路径>")
-  stop("RData 里没有 ggplot / gtable 对象（对象有: ", paste(names_in_file, collapse = ", "), "）")
+  stop(what, " 里没有 ggplot / gtable 对象（对象有: ", paste(nms, collapse = ", "), "）")
 }
 
-# 找 Size：图束里的 $Size 优先，其次工作区里叫 Size 的对象
-find_size_in_env <- function(e, bundle_obj) {
-  if (!is.null(bundle_obj) && is.list(bundle_obj) && "Size" %in% names(bundle_obj))
-    return(bundle_obj[["Size"]])
-  if ("Size" %in% ls(e, all.names = TRUE)) return(get("Size", envir = e))
+# 画布尺寸：sidecar 的 size= > 图束里的 $Size > 环境里叫 Size 的对象 > NULL（交给默认值）
+gtv_pick_size <- function(e, nms, bundle, size = NA_character_, size_unit = "in") {
+  side <- parse_size_str(size, size_unit)
+  if (!is.null(side)) return(side)
+  if (!is.null(bundle) && !is.null(bundle[["Size"]])) {
+    sz <- norm_size(bundle[["Size"]], size_unit, "Size")
+    if (!is.null(sz)) return(sz)
+  }
+  if ("Size" %in% nms) {
+    sz <- norm_size(get("Size", envir = e), size_unit, "Size")
+    if (!is.null(sz)) return(sz)
+  }
   NULL
 }
 
@@ -448,34 +510,46 @@ gtv_load_input <- function(path, plot = NA_character_, size = NA_character_,
   # 调用方常用 NA 表示「没指定」，这里统一成 NULL，免得到处 %||% 漏掉 NA
   if (is.null(root_var) || (length(root_var) == 1 && is.na(root_var))) root_var <- NULL
   ext <- tolower(tools::file_ext(path))
+  from_rdata <- ext %in% c("rdata", "rda", "image")
+  what <- if (from_rdata) "RData" else basename(path)
 
-  # ---- .RData / .rda：工作区快照 ----
-  if (ext %in% c("rdata", "rda", "image")) {
-    e <- new.env(parent = globalenv())
-    nm <- load(path, envir = e)
-    hit  <- find_plot_in_env(e, nm, plot)
-    sraw <- find_size_in_env(e, if (grepl("\\$", hit$expr)) get(sub("\\$.*$", "", hit$expr), envir = e) else NULL)
-    side <- parse_size_str(size, size_unit)
-    sz   <- if (!is.null(side)) side else if (!is.null(sraw)) norm_size(sraw, size_unit, "Size") else NULL
-    if (is.null(sz)) sz <- list(size = c(7, 5), src = "default")
-    kind <- if (inherits(hit$obj, "ggplot")) "ggplot" else "grob"
-    # ggplot 对象本身要 build；已经是 gtable 就直接用。根表达式就是学生手里的取值式。
-    expr <- if (kind == "ggplot") paste0("ggplotGrob(", hit$expr, ")") else hit$expr
-    return(list(obj = hit$obj, kind = kind, root_var = root_var %||% hit$var,
-                root_expr = expr, size_in = sz$size, size_src = sz$src, source = "rdata"))
+  # 两种输入都先摊进一个环境：.RData 是整个工作区，.rds 只有一项（名字 tmp，
+  # 跟学生 saveRDS 时用的变量名无关）。这样 .rds 里存 list(Plot=, Size=) 也认。
+  e <- new.env(parent = globalenv())
+  if (from_rdata) load(path, envir = e) else assign("tmp", readRDS(path), envir = e)
+  nms <- ls(e, all.names = TRUE)
+
+  hit <- if (from_rdata || !is.na(plot)) {
+    gtv_pick_plot(e, nms, plot, what)
+  } else tryCatch(gtv_pick_plot(e, nms, plot, what), error = function(err)
+    stop("rds 里不是 ggplot / gtable 图束：", basename(path),
+         "（class = ", paste(class(e$tmp), collapse = "/"), "）", call. = FALSE))
+
+  # 选中图束时，顺带说一句还有别的可画对象可以换（学生手里的文件常常一堆中间产物）
+  if (!is.null(hit$bundle)) {
+    others <- setdiff(Filter(function(n) is_drawing_obj(get(n, envir = e)), nms), hit$var)
+    if (length(others))
+      cat("   note: ", what, " 里还有可绘制对象：", paste(others, collapse = ", "),
+          "；要换用 sidecar 的 plot=\n", sep = "")
   }
 
-  # ---- .rds：单个对象（ggplot 或 gtable 都收） ----
-  o <- readRDS(path)
-  if (!is_drawing_obj(o))
-    stop("rds 里不是 ggplot / gtable 对象: ", path, "（class=", paste(class(o), collapse = "/"), "）")
-  side <- parse_size_str(size, size_unit)
-  sz   <- if (!is.null(side)) side else list(size = c(7, 5), src = "default")
-  kind <- if (inherits(o, "ggplot")) "ggplot" else "grob"
-  rv   <- root_var %||% "tmp"
-  list(obj = o, kind = kind, root_var = rv,
-       root_expr = if (kind == "ggplot") paste0("ggplotGrob(", rv, ")") else rv,
-       size_in = sz$size, size_src = sz$src, source = "rds")
+  sz <- gtv_pick_size(e, nms, hit$bundle, size, size_unit)
+  if (is.null(sz)) {
+    # 没有 Size：默认 7x5 只对「自己就有绝对尺寸」的图成立。拼出来的 gtable 整列
+    # 都是 null 单位，按默认画会明显不对，这种要提醒（安静地画错比报错更糟）。
+    if (!gtv_has_intrinsic_size(hit$obj))
+      cat("   note: ", what, " 里没找到 Size，而这张 gtable 的宽高全是 null 单位 —— ",
+          "只能按默认 7x5 英寸画，多半不对；请让它带上 $Size，或用 sidecar 的 size=WxH\n", sep = "")
+    sz <- list(size = c(7, 5), src = "default")
+  }
+
+  kind <- if (inherits(hit$obj, "ggplot")) "ggplot" else "grob"
+  # ggplot 对象要 build；已经是 gtable 就直接用。根表达式就是学生手里的取值式。
+  list(obj = hit$obj, kind = kind, root_var = root_var %||% hit$var,
+       root_expr = if (kind == "ggplot") paste0("ggplotGrob(", hit$expr, ")") else hit$expr,
+       size_in = sz$size, size_src = sz$src,
+       source = if (from_rdata) "rdata" else "rds",
+       bundle = hit$bundle)
 }
 
 # ---------------------------------------------------------------------------
@@ -655,6 +729,7 @@ export_gtable <- function(rds_path, json_path, sample_id = "plot",
         colv <- gp$col %||% "#000000"
         lwdv <- gp$lwd %||% 1
         ltyv <- gp$lty %||% 1
+        cap1 <- gtv_cap(gp$lineend)
         i <- seq_len(n)
         ci <- (i - 1) %% length(colv) + 1
         li <- (i - 1) %% length(lwdv) + 1
@@ -675,10 +750,12 @@ export_gtable <- function(rds_path, json_path, sample_id = "plot",
             xy <- c(xy, ax(xs[q]), ay(ys[q]), ax(xe[q]), ay(ye[q]))
           }
           if (!length(xy)) next
-          prims[[length(prims) + 1]] <- list(
+          pr <- list(
             t = "seg", xy = r4(xy), color = scol[[j[1]]], alpha = salpha[[j[1]]],
             lwd = slwd[[j[1]]], dash = lty_is_dash(ltyv[ti[j[1]]])
           )
+          if (!is.null(cap1)) pr$cap <- cap1
+          prims[[length(prims) + 1]] <- pr
         }
       }
     }
@@ -723,9 +800,11 @@ export_gtable <- function(rds_path, json_path, sample_id = "plot",
       if (n >= 1) { xs <- rep_len(xs, n); ys <- rep_len(ys, n) }
       ids <- grob$id %||% rep(1, n)
       if (length(ids) == 1) ids <- rep(ids, n)
-      col <- col_split(gp$col, "#000000")
-      lwd <- r4((gp$lwd %||% 1)[1] * sc_lwd)
-      dash <- lty_is_dash((gp$lty %||% 1)[1])
+      # gp 是按「第几条折线」回收的，不是按点：polylineGrob 有几条折线，gp$col 就有几个值。
+      # 整批取 [1] 是个真 bug —— ggtree 的彩色环 967 条有 62 种颜色，全存成第一种深绿之后，
+      # 网页端这一层的墨量实测是 R 的 1.32 倍（深绿亮度 86，而 62 色的平均亮度 128）。
+      gids <- unique(ids)
+      cap1 <- gtv_cap(gp$lineend); join1 <- gtv_join(gp$linejoin)
       # grid::gridLines() 生成的 polyline 没有 id，但语义是「每两点一条独立线段」
       # （面板网格线）。判据：点数为偶、每对自身轴对齐、而相邻对之间的连线不轴对齐。
       # 满足则按 seg 导出，否则按连续折线 line 导出。
@@ -739,14 +818,21 @@ export_gtable <- function(rds_path, json_path, sample_id = "plot",
           abs(xv[i] - xv[i + 1]) >= e && abs(yv[i] - yv[i + 1]) >= e, logical(1)))
         seg_ok && conn_ok
       }
-      for (gid in unique(ids)) {
-        k <- which(ids == gid & !is.na(xs) & !is.na(ys))
+      for (gi in seq_along(gids)) {
+        k <- which(ids == gids[gi] & !is.na(xs) & !is.na(ys))
         if (length(k) < 2) next
+        lwdv <- gp_at(gp, "lwd", gi); if (is.null(lwdv) || is.na(lwdv)) lwdv <- 1
+        ltyv <- gp_at(gp, "lty", gi); if (is.null(ltyv) || is.na(ltyv)) ltyv <- 1
+        colg <- col_split(gp_at(gp, "col", gi), "#000000")
         type <- if (length(k) > 2 && is_pairs(xs[k], ys[k])) "seg" else "line"
-        prims[[length(prims) + 1]] <- list(
+        pr <- list(
           t = type, xy = r4(as.vector(t(cbind(ax(xs[k]), ay(ys[k]))))),
-          color = col$color, alpha = col$alpha, lwd = lwd, dash = dash
+          color = colg$color, alpha = colg$alpha,
+          lwd = r4(lwdv * sc_lwd), dash = lty_is_dash(ltyv)
         )
+        if (!is.null(cap1)) pr$cap <- cap1
+        if (!is.null(join1) && length(k) > 2) pr$join <- join1
+        prims[[length(prims) + 1]] <- pr
       }
     }
     if ("text" %in% cls) {
@@ -980,7 +1066,11 @@ export_gtable <- function(rds_path, json_path, sample_id = "plot",
     nodes = unname(nodes)
   )
   txt <- jsonlite::toJSON(out, auto_unbox = TRUE, pretty = FALSE, na = "null", digits = 4)
-  writeLines(txt, json_path, useBytes = TRUE)
+  # 直接写原始字节（跟 export_all.R 写 index.json 一样）：
+  #   * writeLines(con = 文件名) 在 Windows 上会做 LF→CRLF 转换，同一份数据在不同
+  #     平台上字节不同 —— 版本库里看着像整文件改动，校验哈希也对不上；
+  #   * 文本连接还可能按本地代码页重编码，把中文写坏。
+  writeBin(charToRaw(paste0(enc2utf8(as.character(txt)), "\n")), json_path)
   cat(sprintf("[export_gtable] %s -> %s  (%dx%d px, 画布 %s, nodes=%d, leaves=%d)\n",
               basename(rds_path), json_path, W_px, H_px, src$size_src, n_counter,
               sum(vapply(nodes, function(n) length(n$prims) > 0, logical(1)))))
@@ -1002,7 +1092,8 @@ if (!isTRUE(getOption("gtv.no_cli"))) local({
   if (length(pos) < 2) {
     cat("用法: Rscript export_gtable.R <input.rds|RData> <output.json> [sample_id] [sample_label]\n")
     cat("        [--root=<变量名>] [--plot=<RData 里的对象或 $路径>] [--size=7x6.11] [--size-unit=in|cm|mm|px]\n")
-    cat("说明: .rds 收 ggplot 或 gtable；.RData 认 list(Plot=, Size=) 这种图束，Size 存在就按它画。\n")
+    cat("说明: .rds 与 .RData 都收「一个 ggplot / gtable」或「图束 list(Plot=, Size=)」；\n")
+    cat("      有 Size 就按 Size 画，没有才用默认 7x5 英寸。\n")
     quit(status = 1)
   }
   export_gtable(

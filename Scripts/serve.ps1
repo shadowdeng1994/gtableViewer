@@ -1,16 +1,20 @@
 ﻿<#
   serve.ps1 — 极简静态文件服务器（仅用于本地开发/验证，网站本身不需要服务器）
 
-  用法： powershell -ExecutionPolicy Bypass -File Scripts/serve.ps1 [-Port 8080]
+  用法： powershell -ExecutionPolicy Bypass -File Scripts/serve.ps1 [-Port 8080] [-Root 目录]
   然后浏览器打开 http://localhost:8080/          （index.html，走 fetch + importmap）
        浏览器打开 http://localhost:8080/preview.html  （内联版，也可离线双击打开）
 
+  -Root 用来把**别的目录**当站点根来验证，默认是本项目目录。典型用法：父仓库（如 AIBook/）
+  里放了一份跳转用的 index.html，想在本机确认「访问仓库根 → 落到 gtableViewer/」，
+  就 -Root .. 起一个服务器，再打开 http://localhost:8080/。
+
   仅监听 127.0.0.1，只读，Ctrl+C 停止。
 #>
-param([int]$Port = 8080)
+param([int]$Port = 8080, [string]$Root)
 
 $ErrorActionPreference = 'Stop'
-$root = Split-Path -Parent $PSScriptRoot
+$root = if ($Root) { (Resolve-Path -LiteralPath $Root).Path } else { Split-Path -Parent $PSScriptRoot }
 
 $mime = @{
   '.html' = 'text/html; charset=utf-8';   '.css'  = 'text/css; charset=utf-8'
@@ -29,6 +33,7 @@ try {
     $rel = [Uri]::UnescapeDataString($ctx.Request.Url.AbsolutePath).TrimStart('/')
     if ([string]::IsNullOrWhiteSpace($rel)) { $rel = 'index.html' }
     $path = [IO.Path]::GetFullPath((Join-Path $root $rel))
+    if (Test-Path $path -PathType Container) { $path = Join-Path $path 'index.html' }
     if (-not $path.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) -or -not (Test-Path $path -PathType Leaf)) {
       $ctx.Response.StatusCode = 404
       $buf = [Text.Encoding]::UTF8.GetBytes('404 Not Found: ' + $rel)

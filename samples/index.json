@@ -6,7 +6,7 @@
     "file": "scatter.json",
     "nodes": 26,
     "leaves": 14,
-    "kb": 14.1
+    "kb": 14.2
   },
   {
     "id": "boxplot",
@@ -24,7 +24,7 @@
     "file": "facet.json",
     "nodes": 169,
     "leaves": 95,
-    "kb": 71.6
+    "kb": 72.1
   },
   {
     "id": "hist",
@@ -33,15 +33,15 @@
     "file": "hist.json",
     "nodes": 23,
     "leaves": 11,
-    "kb": 11.8
+    "kb": 11.9
   },
   {
     "id": "RepresentativeTree",
-    "name": "组合大图（.RData + Size）",
-    "desc": "33 个 grob 的 arrange 布局，画布尺寸取自 RData 里的 Size",
+    "name": "环状进化树（ggtree + Size）",
+    "desc": "一个图束：22 个 grob 的嵌套 gtable，4161 条折线（枝干 round 端头 + 62 色环），画布 3x3 英寸取自 Size",
     "file": "RepresentativeTree.json",
     "nodes": 22,
     "leaves": 7,
-    "kb": 424.5
+    "kb": 470.8
   }
 ]

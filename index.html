@@ -12,12 +12,15 @@
 <!-- 图标直接内联成 data: URI：不多一个请求、file:// 双击也能显示、还顺手消掉 /favicon.ico 的 404。
      build_preview.ps1 的「产物不得引用外部文件」自查专门给 data: 开了口子。 -->
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%230f172a'/%3E%3Cg%20fill='none'%20stroke-width='2'%3E%3Crect%20x='5'%20y='19'%20width='16'%20height='8'%20rx='1.5'%20stroke='%2360a5fa'/%3E%3Crect%20x='8'%20y='12'%20width='16'%20height='8'%20rx='1.5'%20stroke='%2334d399'/%3E%3Crect%20x='11'%20y='5'%20width='16'%20height='8'%20rx='1.5'%20stroke='%23facc15'/%3E%3C/g%3E%3C/svg%3E" />
-<!-- 主题预置：首帧之前就把 data-theme 落到 <html>，否则刷新时会先闪一下默认色 -->
+<!-- 主题预置：首帧之前就把 data-theme 落到 <html>，否则刷新时会先闪一下默认色。
+     默认白天（亮色，与 style.css 的 :root、main.js 的 state.theme 三处一致）；
+     点过切换按钮才落盘，之后按存的来。键名带 v2：v1 的值可能是早期版本初始化时
+     自己写进去的（不是偏好），留着会把新默认顶掉。 -->
 <script>
   (function () {
-    var t = 'dark';
-    try { t = localStorage.getItem('gtv-theme') || 'dark'; } catch (e) { /* file:// 下可能被禁用 */ }
-    document.documentElement.dataset.theme = (t === 'light') ? 'light' : 'dark';
+    var t = 'light';
+    try { t = localStorage.getItem('gtv-theme-v2') || 'light'; } catch (e) { /* file:// 下可能被禁用 */ }
+    document.documentElement.dataset.theme = (t === 'dark') ? 'dark' : 'light';
   })();
 </script>
 <!-- 折叠预置：同理，先按上次存的折叠状态落 data-lfold / data-rfold，避免刷新时左右栏先展开再收起 -->
@@ -72,7 +75,7 @@
     <span class="ico">⊟</span><span id="fold-all-text">折叠全部</span>
   </button>
   <button id="btn-theme" title="切换明暗主题（快捷键 T）">
-    <span class="ico">◐</span><span id="theme-text">暗色</span>
+    <span class="ico">☀</span><span id="theme-text">亮色</span>
   </button>
 </header>
 

@@ -10,8 +10,8 @@
   输出： gtableViewer/preview.html
 
   -MaxSampleMB：跳过超过该体积的样例（并从内嵌清单里一起去掉），默认 0 = 全部内联。
-                大样例（RepresentativeTree 约 12MB）会让单文件版膨胀到十几 MB，
-                调前端时用它出一个小的 preview.html 验证 file:// 路径即可，别拿它当交付物。
+                用户自己丢进来的大图（几十万条线的拼图那种）会让单文件版膨胀到十几 MB，
+                调前端时用它出一个小的 preview.html 验证 file:// 路径即可。
 
   做法（纯文本改写，不改动任何运行逻辑）：
     1. lib/three.module.js  删除末尾 `export { ... };`，并用该导出列表合成 `const THREE = { ... };`

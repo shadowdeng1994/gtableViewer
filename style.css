@@ -1,50 +1,10 @@
 /* gtableViewer — style.css
-   颜色一律走 CSS 变量：暗色是 :root 默认值，亮色在 html[data-theme="light"] 里整组覆盖。
+   颜色一律走 CSS 变量：亮色（白天）是 :root 默认值，暗色在 html[data-theme="dark"] 里整组覆盖。
+   「默认白天」这件事有三处保持一致：这里的 :root、main.js 的 state.theme、index.html <head>
+   里那段预置脚本 —— 要改默认就三处一起改。
    main.js 会读 --label-bg / --label-fg / --hl-hover / --frame-3d 四个变量来画 canvas 与 3D 线框，
    所以新增配色请改这里，不要往 JS 里写死。 */
 :root {
-  --bg: #0b0f1a;
-  --bg-2: #111827;
-  --panel: #131a2b;
-  --panel-2: #182034;
-  --line: #232d45;
-  --fg: #e6edf3;
-  --mut: #8b98b8;
-  --accent: #60a5fa;
-  --mono: "JetBrains Mono", "Cascadia Code", Consolas, "Courier New", monospace;
-
-  color-scheme: dark;
-  --header-bg: linear-gradient(180deg, #16203a, #101728);
-  --vp-bg: radial-gradient(120% 120% at 50% 0%, #16203a 0%, #0a0e18 70%);
-  --wrap-bg: #0d1322;
-  --shadow-2d: 0 4px 22px rgba(0, 0, 0, .5);
-  --btn-on-bg: #1d4ed8;
-  --btn-on-bd: #3b82f6;
-  --toolbar-bg: rgba(11, 15, 26, .78);
-  --tip-bg: rgba(9, 13, 24, .95);
-  --tip-fg: #cfd8ea;
-  --tip-title: #fff;
-  --item-line: #1f2941;
-  --kids-line: #1e2740;
-  --row-hover: #1a2338;
-  --row-hov: #22304d;
-  --row-sel: #1e3a8a;
-  --row-sel-bd: #3b82f6;
-  --row-desc: #16244a;
-  --tree-nm: #b9c4dd;
-  --tree-cnt: #5b6a8c;
-  --tree-z: #475569;
-  --sb-1: #26314e;
-  --sb-2: #33436b;
-  /* 下面五个会被 main.js 读取 */
-  --label-bg: rgba(11, 15, 26, .9);
-  --label-bd: rgba(255, 255, 255, .16);
-  --label-fg: #e6edf3;
-  --hl-hover: #ffffff;
-  --frame-3d: #64748b;
-}
-
-html[data-theme="light"] {
   --bg: #eef1f7;
   --bg-2: #e4e9f2;
   --panel: #ffffff;
@@ -53,6 +13,7 @@ html[data-theme="light"] {
   --fg: #16203a;
   --mut: #5b6780;
   --accent: #2563eb;
+  --mono: "JetBrains Mono", "Cascadia Code", Consolas, "Courier New", monospace;
 
   color-scheme: light;
   --header-bg: linear-gradient(180deg, #ffffff, #eaeff8);
@@ -77,11 +38,52 @@ html[data-theme="light"] {
   --tree-z: #9aa6bd;
   --sb-1: #c3ccdd;
   --sb-2: #a9b6cd;
+  /* 下面五个会被 main.js 读取 */
   --label-bg: rgba(255, 255, 255, .94);
   --label-bd: rgba(22, 32, 58, .22);
   --label-fg: #16203a;
   --hl-hover: #0f172a;
   --frame-3d: #94a3b8;
+}
+
+html[data-theme="dark"] {
+  --bg: #0b0f1a;
+  --bg-2: #111827;
+  --panel: #131a2b;
+  --panel-2: #182034;
+  --line: #232d45;
+  --fg: #e6edf3;
+  --mut: #8b98b8;
+  --accent: #60a5fa;
+
+  color-scheme: dark;
+  --header-bg: linear-gradient(180deg, #16203a, #101728);
+  --vp-bg: radial-gradient(120% 120% at 50% 0%, #16203a 0%, #0a0e18 70%);
+  --wrap-bg: #0d1322;
+  --shadow-2d: 0 4px 22px rgba(0, 0, 0, .5);
+  --btn-on-bg: #1d4ed8;
+  --btn-on-bd: #3b82f6;
+  --toolbar-bg: rgba(11, 15, 26, .78);
+  --tip-bg: rgba(9, 13, 24, .95);
+  --tip-fg: #cfd8ea;
+  --tip-title: #fff;
+  --item-line: #1f2941;
+  --kids-line: #1e2740;
+  --row-hover: #1a2338;
+  --row-hov: #22304d;
+  --row-sel: #1e3a8a;
+  --row-sel-bd: #3b82f6;
+  --row-desc: #16244a;
+  --tree-nm: #b9c4dd;
+  --tree-cnt: #5b6a8c;
+  --tree-z: #475569;
+  --sb-1: #26314e;
+  --sb-2: #33436b;
+  --label-bg: rgba(11, 15, 26, .9);
+  --label-bd: rgba(255, 255, 255, .16);
+  --label-fg: #e6edf3;
+  --hl-hover: #ffffff;
+  --frame-3d: #64748b;
 }
 
 * { box-sizing: border-box; }

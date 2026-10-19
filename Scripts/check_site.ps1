@@ -5,14 +5,15 @@
   不碰 R、不联网、不构建，纯静态检查，几秒钟出结果。它只回答一个问题：
   「这个目录直接当仓库根推上去，Pages 上能不能正常打开？」
 
-  查六件事：
+  查七件事：
     1) 站点必需文件在不在（含 LICENSE / .nojekyll）
     2) samples/index.json 与磁盘上的 json 是否一一对应、能否解析、节点数是否过期
     3) index.html 的 src/href 与 main.js 的 fetch 是否全是相对路径，
        且大小写与磁盘上的真实文件名完全一致（Pages 是 Linux，大小写敏感）
     4) import map 指向的 lib/ 文件是否存在且体积正常（防半份拷贝）
     5) 脚本编码约定：.ps1 带 BOM、.R 不带 BOM、.bat 纯 ASCII + CRLF
-    6) 有没有把 Rplots.pdf 之类的垃圾文件、或 1.5 MB 的 preview.html 一起带上
+    6) 行尾约定跟 .gitattributes 对齐（.ps1/.bat 用 CRLF，站点文件与数据用 LF）
+    7) 有没有把 Rplots.pdf 之类的垃圾文件、或 1.5 MB 的 preview.html 一起带上
 
   用法：
     powershell -NoProfile -ExecutionPolicy Bypass -File Scripts/check_site.ps1
@@ -176,6 +177,36 @@ foreach ($d in $scriptDirs) {
   }
 }
 
+# 行尾约定：跟 .gitattributes 对齐 —— .ps1/.bat/.cmd 是 CRLF，站点文件与数据是 LF。
+# 不一致的文件在 git 里会整篇显示成改动，跨平台重跑出来的字节也不同（校验哈希对不上）。
+# 这里只看行尾；BOM 上面已经查过。lib/ 是原样分发的第三方拷贝，故意不查。
+$eolTargets = @()
+foreach ($p in @('index.html', 'style.css', 'main.js', 'README.md', '.gitignore', '.gitattributes', 'LICENSE')) {
+  $fp = Join-Path $root $p
+  if (Test-Path -LiteralPath $fp) { $eolTargets += Get-Item -LiteralPath $fp }
+}
+foreach ($p in @('Scripts', 'samples')) {
+  $fp = Join-Path $root $p
+  if (Test-Path -LiteralPath $fp -PathType Container) {
+    $eolTargets += @(Get-ChildItem -LiteralPath $fp -Recurse -File |
+      Where-Object { $_.Extension -in '.R', '.ps1', '.bat', '.cmd', '.js', '.json', '.txt', '.md' })
+  }
+}
+$eolBad = @()
+foreach ($f in $eolTargets) {
+  $b = [IO.File]::ReadAllBytes($f.FullName)
+  if ($b.Length -eq 0 -or ($b -contains 0)) { continue }
+  $t = [Text.Encoding]::UTF8.GetString($b)
+  $crlf = ([regex]::Matches($t, '\r\n')).Count
+  $bare = ([regex]::Matches($t, '(?<!\r)\n')).Count
+  $wantCrlf = $f.Extension -in '.ps1', '.bat', '.cmd'
+  $rel = $f.FullName.Substring($root.Length + 1).Replace('\', '/')
+  if ($wantCrlf -and $bare -gt 0) { $eolBad += "$rel 该用 CRLF，却有 $bare 处裸 LF" }
+  if (-not $wantCrlf -and $crlf -gt 0) { $eolBad += "$rel 该用 LF，却有 $crlf 处 CRLF" }
+}
+if ($eolBad.Count) { foreach ($x in $eolBad) { Fail $x } }
+else { Ok ('行尾统一（{0} 个文本文件按 .gitattributes 对齐）' -f $eolTargets.Count) }
+
 # ── 6) 垃圾文件与构建产物 ────────────────────────────────────────────────
 Head '6) 工作区干净度'
 $junkPat = '^Rplots\.pdf$|\.Rhistory$|\.RData$|^\.DS_Store$|^Thumbs\.db$|^desktop\.ini$|\.tmp$|\.log$|\.bak$'
@@ -219,4 +250,5 @@ if ($fails.Count) {
   exit 2
 }
 Write-Host '   可以上传：仓库根 = 站点根，Pages 选 Deploy from a branch → 分支 /(root) 即可。' -ForegroundColor Green
+Write-Host '   若本目录只是大仓库里的一个子目录（如 AIBook/gtableViewer），用仓库根那份跳转 index.html + .nojekyll 落到这里。' -ForegroundColor Green
 exit 0

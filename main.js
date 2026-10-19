@@ -71,7 +71,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     explode: 0,          // 启动是俯视，爆炸量归零；点 3D 会恢复到 lastExplode
     isolate: false,
     showLabels: true,
-    theme: 'dark',       // 'dark' | 'light'，由 <html data-theme> 上的预置脚本决定
+    theme: 'light',      // 'dark' | 'light'，默认白天；<head> 预置脚本会按 localStorage 覆盖它
     meshOf: new Map(),   // id → THREE.Mesh
   };
 
@@ -95,15 +95,15 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
   // 颜色唯一事实源是 style.css 的 CSS 变量；canvas 与 3D 线框画不出 var()，
   // 所以换主题时把这几个变量重读进 themeColors，别在 JS 里另写一套色值。
-  const THEME_KEY = 'gtv-theme';
+  const THEME_KEY = 'gtv-theme-v2';   // v1（'gtv-theme'）里的值可能是初始化自己写进去的，没法当偏好信任，故换键
   const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
   const themeColors = {};
   function readThemeColors() {
-    themeColors.labelBg = cssVar('--label-bg') || 'rgba(11,15,26,.9)';
-    themeColors.labelBd = cssVar('--label-bd') || 'rgba(255,255,255,.18)';
-    themeColors.labelFg = cssVar('--label-fg') || '#e6edf3';
-    themeColors.hlHover = cssVar('--hl-hover') || '#ffffff';
-    themeColors.frame = cssVar('--frame-3d') || '#64748b';
+    themeColors.labelBg = cssVar('--label-bg') || 'rgba(255,255,255,.94)';
+    themeColors.labelBd = cssVar('--label-bd') || 'rgba(22,32,58,.22)';
+    themeColors.labelFg = cssVar('--label-fg') || '#16203a';
+    themeColors.hlHover = cssVar('--hl-hover') || '#0f172a';
+    themeColors.frame = cssVar('--frame-3d') || '#94a3b8';
   }
 
   /**
@@ -119,7 +119,9 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
   function applyTheme(t, first) {
     state.theme = t === 'light' ? 'light' : 'dark';
     document.documentElement.dataset.theme = state.theme;
-    try { localStorage.setItem(THEME_KEY, state.theme); } catch (e) { /* file:// 下可能被禁用 */ }
+    // 只在「用户真的点了切换」时落盘：初始化那次（first）写进去的值不是偏好，
+    // 却会被 <head> 的预置脚本当成偏好读回来 —— 换默认主题时就会被它顶掉。
+    if (!first) { try { localStorage.setItem(THEME_KEY, state.theme); } catch (e) { /* file:// 下可能被禁用 */ } }
     const btn = $('btn-theme');
     if (btn) {
       btn.querySelector('.ico').textContent = state.theme === 'light' ? '☀' : '☾';
@@ -411,11 +413,12 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
    *   fx/fy  = 每 1「72dpi 物理像素」对应多少画布像素（lwd / size / 字号都用物理像素）
    * 图元 schema 见 Scripts/export_gtable.R：
    *   rect {x,y,w,h,fill,fill_alpha,stroke,stroke_alpha,lwd}
-   *   seg  {xy:[x0,y0,x1,y1,…] 两两成段, color,alpha,lwd,dash}
-   *   line {xy:[…连续折线],     color,alpha,lwd,dash}
+   *   seg  {xy:[x0,y0,x1,y1,…] 两两成段, color,alpha,lwd,dash,cap?}
+   *   line {xy:[…连续折线],     color,alpha,lwd,dash,cap?,join?}
    *   poly {xy:[…连续顶点,闭合], fill,fill_alpha,stroke,stroke_alpha,lwd,dash}
    *   pts  {xy:[…], size=直径, color,alpha,fill,fill_alpha}
    *   text {s,x,y,size,color,alpha,rot,hjust,vjust,bold,italic}
+   * cap/join 只在非默认值（butt/miter）时出现，取自 grid 的 gp$lineend / gp$linejoin。
    * 颜色为 null / 非字符串（旧导出的 {}）一律视为「不上色」。
    */
   function drawPrims(ctx, prims, W, H, bbox, page) {
@@ -476,8 +479,14 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
           if (stroke) {
             ctx.strokeStyle = stroke;
             ctx.lineWidth = lw(p, fx);
+            // grid 的 lineend / linejoin：默认 butt + miter 与 canvas 相同，导出器只在非默认时写进 JSON
+            // （ggtree 的枝干是 round 端头，按 butt 画整棵树会比 R 淡 4~14%）
+            if (p.cap) ctx.lineCap = p.cap;
+            if (p.join) ctx.lineJoin = p.join;
             ctx.globalAlpha = p.stroke_alpha == null ? a : p.stroke_alpha;
             ctx.stroke();
+            if (p.cap) ctx.lineCap = 'butt';
+            if (p.join) ctx.lineJoin = 'miter';
           }
           if (p.dash) ctx.setLineDash([]);
         }
@@ -1385,7 +1394,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
   init3d();
   bindUI();
   // 主题在 <head> 里已经落到 <html data-theme>，这里只是把 JS 侧的状态与 canvas/3D 颜色对齐
-  applyTheme(document.documentElement.dataset.theme || 'dark', true);
+  applyTheme(document.documentElement.dataset.theme || 'light', true);
   animate();
   // 清单先到（决定下拉框内容），再加载第一个样例；清单拿不到时用的是内置兜底
   loadSampleList()

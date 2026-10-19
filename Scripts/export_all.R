@@ -90,9 +90,9 @@ BUILTIN <- list(
   # .RData 图束这一例：源文件是 save(...) 的工作区快照（list(Plot=, Size=)），
   # 根变量名不用写 —— 装载层会直接用 RData 里那个对象的名字。
   RepresentativeTree = list(
-                 label = "\u7ec4\u5408\u56fe ggtree\uff08.RData \u56fe\u675f\uff09", root = NA_character_,
-                 name  = "\u7ec4\u5408\u5927\u56fe\uff08.RData + Size\uff09",
-                 desc  = "33 \u4e2a grob \u7684 arrange \u5e03\u5c40\uff0c\u753b\u5e03\u5c3a\u5bf8\u53d6\u81ea RData \u91cc\u7684 Size")
+                 label = "\u73af\u72b6\u8fdb\u5316\u6811 ggtree\uff08.RData \u56fe\u675f\uff09", root = NA_character_,
+                 name  = "\u73af\u72b6\u8fdb\u5316\u6811\uff08ggtree + Size\uff09",
+                 desc  = "\u4e00\u4e2a\u56fe\u675f\uff1a22 \u4e2a grob \u7684\u5d4c\u5957 gtable\uff0c4161 \u6761\u6298\u7ebf\uff08\u679d\u5e72 round \u7aef\u5934 + 62 \u8272\u73af\uff09\uff0c\u753b\u5e03 3x3 \u82f1\u5bf8\u53d6\u81ea Size")
 )
 META_KEYS <- c("label", "root", "name", "desc", "plot", "size", "size_unit")
 

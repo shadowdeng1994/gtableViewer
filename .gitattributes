@@ -23,6 +23,9 @@
 
 # Never touch bytes.
 *.rds  binary
+*.RData binary
+*.rdata binary
+*.rda   binary
 *.pdf  binary
 *.png  binary
 *.jpg  binary

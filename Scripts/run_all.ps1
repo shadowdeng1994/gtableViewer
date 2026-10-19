@@ -9,7 +9,7 @@
     ... -Samples        强制重建 rds/*.rds（跑 make_samples.R）
     ... -Clean          删掉没有对应 rds 的 samples/*.json
     ... -SkipFresh      只重导「rds 比 json 新」的样例
-    ... -SkipCheck      跳过 R 侧两项校验（check_rpath.R + check_math_label.R）
+    ... -SkipCheck      跳过 R 侧三项校验（check_loaders.R + check_math_label.R + check_rpath.R）
     ... -SkipPreview    跳过 build_preview.ps1
     ... -SkipSite       跳过 check_site.ps1（站点自检，Pages 上传前别跳）
     ... -Ref            重新生成 Scripts/.ref/*.grid.txt（R 渲染基准，改了导出器才需要）
@@ -112,12 +112,13 @@ if ($SkipFresh){ $expArgs += '--skip-fresh' }
 if ($Only)     { $expArgs += "--only=$Only" }
 Invoke-Step 'export_all.R（rds → samples/*.json）' { & $Rscript @expArgs }
 
-# ── 3) 路径校验：每条 rpath 在 R 里真能取到那个 grob ────────────────────────
+# ── 3) R 侧回归：装载层 / 标签降级 / 定位路径 ──────────────────────────────
+# 顺序按「跑得快 → 跑得慢」排：装载层两三秒，标签降级几秒，check_rpath 要重画所有图。
 if ($Ref) { Invoke-Step 'ref_grid.R' { & $Rscript 'Scripts/ref_grid.R' } }
 if ($SkipCheck) {
-  "--- R 侧校验（check_math_label.R + check_rpath.R，已跳过）---`n"
+  "--- R 侧校验（check_loaders.R + check_math_label.R + check_rpath.R，已跳过）---`n"
 } else {
-  # 先跑几秒钟那个：导出器的降级函数被改坏时，不必等 check_rpath 重画一遍所有图
+  Invoke-Step 'check_loaders.R（.rds / .RData 装载回归）' { & $Rscript 'Scripts/check_loaders.R' }
   Invoke-Step 'check_math_label.R（plotmath 标签降级回归）' { & $Rscript 'Scripts/check_math_label.R' }
   Invoke-Step 'check_rpath.R（校验 gtable 定位路径）' { & $Rscript 'Scripts/check_rpath.R' }
 }
